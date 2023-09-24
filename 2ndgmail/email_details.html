@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Google Font Icons and other styles -->
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+  <link rel="stylesheet" href="mynewgmail.css" />
+  <title>Email Details - Gmail Clone</title>
+</head>
+<body>
+  <!-- Email details section -->
+  <div id="email_details" class="animated fadeIn">
+    <h2>Email Details</h2>
+    <div id="email_subject"></div>
+    <pre id="email_content" style="white-space: pre-wrap;"></pre>
+    <a href="javascript:void(0);" onclick="goBackToInbox()">Back to Inbox</a>
+  </div>
+
+  <script type="text/javascript">
+    
+    const CLIENT_ID = '753418069033-h4frrjeuqb2m3usa8mmeo1vvuh3l6qdi.apps.googleusercontent.com';
+    const API_KEY = 'AIzaSyBj8IMP5YImKBSZrUa8nbdRPKScGv9GD34';
+
+    // Discovery doc URL for APIs used by the quickstart
+    const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest';
+
+    // Authorization scopes required by the API; multiple scopes can be included, separated by spaces.
+    const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send';
+
+    let nextPageToken = null;
+    let prevPageToken = null;
+    let selectedMessageId = null;
+
+
+    function gapiLoaded() {
+      gapi.load('client', initializeGapiClient);
+    }
+
+    async function initializeGapiClient() {
+      await gapi.client.init({
+        apiKey: API_KEY,
+        discoveryDocs: [DISCOVERY_DOC],
+      });
+      showMessageDetails();
+    }
+
+    function gisLoaded() {
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPES,
+        callback: '', // defined later
+      });
+    }
+
+    async function showMessageDetails(messageId) {
+  try {
+    const response = await gapi.client.gmail.users.messages.get({
+      'userId': 'me',
+      'id': messageId,
+      'format': 'full'
+    });
+
+    const message = response.result;
+    if (!message) {
+      alert('Message not found.');
+      return;
+    }
+
+    // Display email subject and content
+    const subjectHeader = message.payload.headers.find(header => header.name === 'Subject');
+    const emailSubject = subjectHeader ? subjectHeader.value : 'No Subject';
+    document.getElementById('email_subject').innerText = `Subject: ${emailSubject}`;
+
+    const emailContent = getEmailContent(message.payload);
+    if (emailContent) {
+      document.getElementById('email_content').innerHTML = emailContent;
+    } else {
+      document.getElementById('email_content').innerText = 'No Content Found.';
+    }
+
+    // Store the selected message ID for future reference
+    selectedMessageId = messageId;
+  } catch (error) {
+    console.error('Error fetching or displaying message:', error);
+    alert('Error fetching or displaying message. Please try again later.');
+  }
+}
+
+function getEmailContent(payload) {
+  try {
+    if (payload.parts) {
+      const htmlPart = payload.parts.find(part => part.mimeType === 'text/html');
+      if (htmlPart && htmlPart.body && htmlPart.body.data) {
+        const decodedEmailContent = window.atob(htmlPart.body.data.replace(/-/g, '+').replace(/_/g, '/'));
+        return decodedEmailContent;
+      }
+    } else if (payload.body && payload.body.data) {
+      const decodedEmailContent = window.atob(payload.body.data.replace(/-/g, '+').replace(/_/g, '/'));
+      return decodedEmailContent;
+    }
+  } catch (error) {
+    console.error('Error decoding email content:', error);
+  }
+  return null;
+}
+
+    
+async function sendSpecificEmail() {
+  const recipientEmail = document.getElementById('recipient_email').value;
+  if (!recipientEmail) {
+    alert('Recipient email address is required.');
+    return;
+  }
+
+  // Validate the recipient's email address using regular expression
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(recipientEmail)) {
+    alert('Invalid recipient email address. Please enter a valid Gmail address.');
+    return;
+  }
+
+  // Get all selected message IDs
+  const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+  const selectedMessageIds = Array.from(checkboxes)
+    .filter(checkbox => checkbox.checked)
+    .map(checkbox => checkbox.id.replace('checkbox_', ''));
+
+  if (selectedMessageIds.length === 0) {
+    alert('Please select at least one email from the inbox to send.');
+    return;
+  }
+
+  // Send the selected emails to the recipient
+  for (const messageId of selectedMessageIds) {
+    await sendMail(messageId, recipientEmail);
+  }
+  toggleSendSpecificEmailSection();
+}
+
+async function sendMail(messageId, recipientEmail) {
+      try {
+        if (!recipientEmail) {
+          alert('Recipient email address is required.');
+          return;
+        }
+
+        const response = await gapi.client.gmail.users.messages.get({
+          'userId': 'me',
+          'id': messageId,
+          'format': 'full' // Retrieve the full email content
+        });
+
+        const message = response.result;
+        if (!message) {
+          alert('Message not found.');
+          return;
+        }
+
+        // Get the email subject and content
+        const emailSubject = message.payload.headers.find(header => header.name === 'Subject').value;
+        let emailContent = '';
+
+        // Check if the email has HTML content
+        const htmlPart = message.payload.parts.find(part => part.mimeType === 'text/html');
+        if (htmlPart && htmlPart.body && htmlPart.body.data) {
+          emailContent = window.atob(htmlPart.body.data.replace(/-/g, '+').replace(/_/g, '/')); // Decode the HTML content
+        } else {
+          // If no HTML content, fall back to plain text
+          const plainPart = message.payload.parts.find(part => part.mimeType === 'text/plain');
+          if (plainPart && plainPart.body && plainPart.body.data) {
+            emailContent = window.atob(plainPart.body.data.replace(/-/g, '+').replace(/_/g, '/')); // Decode the plain text content
+          }
+        }
+
+        // Create the new email with the selected email's content
+        const rawEmail = `To: ${recipientEmail}\r\nSubject: Forwarded: ${emailSubject}\r\nContent-Type: text/html; charset="UTF-8"\r\n\r\n${emailContent}`;
+
+        const base64EncodedEmail = btoa(unescape(encodeURIComponent(rawEmail)));
+
+        const sendResponse = await gapi.client.gmail.users.messages.send({
+          'userId': 'me',
+          'resource': {
+            'raw': base64EncodedEmail,
+          }
+        });
+
+        // Check the sendResponse and handle success/error accordingly
+        if (sendResponse.status === 200) {
+          alert('Email sent successfully!');
+        } else {
+          alert('Error sending the email. Please try again later.');
+        }
+      } catch (error) {
+        console.error('Error sending the email:', error);
+
+        // Log the detailed error response for debugging
+        console.log('Error Response:', error.result);
+
+        // Display a generic error message to the user
+        alert('Error sending the email. Please try again later.');
+      }
+    }
+  </script>
+  <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+  <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
+</body>
+</html>

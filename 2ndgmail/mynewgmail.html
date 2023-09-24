@@ -1,0 +1,478 @@
+  <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <!-- Google Font Icons -->
+      <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+      <link rel="stylesheet" href="mynewgmail.css" />
+      <title>Gmail Clone</title>
+    </head>
+    <body>
+      <div class="header">
+        <div class="header__left">          
+          <img src="https://complyrelax.com/NBFC/img/crdlogo.jpeg" alt=""/>
+        </div>
+
+        <div class="header__middle">
+          <span class="material-icons"> search </span>
+          <input type="text" id="search_input" placeholder="Search mail" oninput="handleSearch()">
+        </div>
+
+        <div class="header__right">
+          <span class="material-icons"> account_circle </span>
+          <!-- <img id="profile_picture" class="profile-picture" alt="Profile Picture" /> -->
+        </div>
+      </div>
+      <div class="main__body">
+        <div class="sidebar">
+          <div class="sidebarOption sidebarOption__active">
+            <span class="material-icons"> inbox </span>
+            <h3>Inbox</h3>
+          </div>        
+        </div>
+        <div class="emailList">
+          <div class="emailList__settings" id="primary_inbox" style="display: block;">
+            <div class="section section__selected">
+              <span class="material-icons"> inbox </span>
+              <h4>Primary</h4>
+              </div>
+          </div>
+         
+          <button id="authorize_button" onclick="handleAuthClick()">Authorize</button>
+          <button id="signout_button" onclick="handleSignoutClick()">Sign Out</button>
+
+          <div id="inbox_messages" class="animated fadeIn"></div>
+          <div id="pagination_controls">
+            <button id="prev_page_button" onclick="getPreviousPage()">Previous Page</button>
+            <button id="next_page_button" onclick="getNextPage()">Next Page</button>
+          </div>
+          <div id="inbox_list"></div>
+          <div id="message_details_container" style="display: none;">
+           <div id="back_button" onclick="goBackToInboxList()">
+              <span class="material-icons backicon">arrow_back</span>
+            </div>        
+            <div id="email_subject"></div>
+            <pre id="email_content" style="white-space: pre-wrap;"></pre>
+            <div id="email_attachments"></div>
+          </div>
+        
+          <!-- Container for sending a specific email -->
+          <div id="send_specific_email" class="animated fadeIn" style="display: none;">
+            <h2>Send Specific Email</h2>
+            <input type="text" id="recipient_email" placeholder="Recipient's Gmail Address" />
+            <button id="send_button" onclick="sendSpecificEmail()">Send</button>
+          </div>
+        </div>
+      </div>
+      <script type="text/javascript">
+      const CLIENT_ID = '753418069033-h4frrjeuqb2m3usa8mmeo1vvuh3l6qdi.apps.googleusercontent.com';
+      const API_KEY = 'AIzaSyBj8IMP5YImKBSZrUa8nbdRPKScGv9GD34';
+
+    // Discovery doc URL for APIs used by the quickstart
+    const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest';
+
+    // Authorization scopes required by the API; multiple scopes can be included, separated by spaces.
+    const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send';
+
+    let nextPageToken = null;
+    let prevPageToken = null;
+    let selectedMessageId = null;
+    let currentSearchQuery = null;
+
+    // Hide buttons initially
+    document.getElementById('authorize_button').style.visibility = 'hidden';
+    document.getElementById('signout_button').style.visibility = 'hidden';
+
+    function gapiLoaded() {
+      gapi.load('client', initializeGapiClient);
+    }
+
+    async function initializeGapiClient() {
+      await gapi.client.init({
+        apiKey: API_KEY,
+        discoveryDocs: [DISCOVERY_DOC],
+      });
+      maybeEnableButtons();
+    }
+
+    function gisLoaded() {
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPES,
+        callback: '', // defined later
+      });
+    }
+
+    function maybeEnableButtons() {
+      document.getElementById('authorize_button').style.visibility = 'visible';
+    }
+
+    function handleSearch() {
+      const searchInput = document.getElementById('search_input');
+      const newSearchQuery = searchInput.value.trim();
+
+      // Only update the displayed emails if the search query has changed
+      if (newSearchQuery !== currentSearchQuery) {
+        currentSearchQuery = newSearchQuery;
+        // Load emails with the new search query
+        listLabels(null, currentSearchQuery);
+      }
+    }
+    function handleAuthClick() {
+      tokenClient.callback = async (resp) => {
+        if (resp.error !== undefined) {
+          throw (resp);
+        }
+        document.getElementById('signout_button').style.visibility = 'visible';
+        document.getElementById('authorize_button').innerText = 'Refresh';
+        await listLabels();
+      };
+
+      if (gapi.client.getToken() === null) {
+        // Prompt the user to select a Google Account and ask for consent to share their data
+        // when establishing a new session.
+        tokenClient.requestAccessToken({ prompt: 'consent' });
+      } else {
+        // Skip display of account chooser and consent dialog for an existing session.
+        tokenClient.requestAccessToken({ prompt: '' });
+      }
+    }
+
+    function handleSignoutClick() {
+      const token = gapi.client.getToken();
+      if (token !== null) {
+        google.accounts.oauth2.revoke(token.access_token);
+        gapi.client.setToken('');
+        document.getElementById('inbox_messages').innerText = '';
+        document.getElementById('email_subject').innerText = '';
+        document.getElementById('email_content').innerText = '';
+        document.getElementById('authorize_button').innerText = 'Authorize';
+        document.getElementById('signout_button').style.visibility = 'hidden';
+      }
+    }
+
+    async function listLabels(pageToken, searchQuery = '') {
+    let request = {
+    userId: 'me',
+    pageToken: pageToken,
+    maxResults: 50,
+  };
+
+  if (searchQuery) {
+    request.q = `subject:${searchQuery}`;
+  }
+
+  let response;
+  try {
+    response = await gapi.client.gmail.users.messages.list(request);
+  } catch (err) {
+    document.getElementById('inbox_messages').innerText = err.message;
+    return;
+  }
+
+  const messages = response.result.messages;
+  if (!messages || messages.length === 0) {
+    document.getElementById('inbox_messages').innerText = 'No messages found.';
+    return;
+  }
+
+  // Clear previous messages
+  document.getElementById('inbox_messages').innerHTML = '';
+
+  // Fetch and display Gmail-type message content for each message
+  for (const message of messages) {
+    const messageDetails = await gapi.client.gmail.users.messages.get({
+      userId: 'me',
+      id: message.id,
+      format: 'full',
+    });
+
+    // Get important details from the email (e.g., sender, subject, etc.)
+    const headers = messageDetails.result.payload.headers;
+    let sender = '';
+    let subject = '';
+    for (const header of headers) {
+      if (header.name === 'From') {
+        sender = header.value;
+      } else if (header.name === 'Subject') {
+        subject = header.value;
+      }
+    }
+
+    // Highlight search term in subject
+    const highlightedSubject = highlightSearchMatches(subject, currentSearchQuery);
+
+    // Create a clickable element for each email
+    const messageElement = document.createElement('div');
+    messageElement.className = 'gmail-message'; // Add the desired class name here
+    messageElement.innerHTML = `
+      <input type="checkbox" id="checkbox_${message.id}" />
+      ${sender} - ${highlightedSubject}`;
+    messageElement.style.cursor = 'pointer';
+    messageElement.onclick = () => handleEmailClick(message.id);
+    messageElement.title = 'Click to send this email to another Gmail address';
+    document.getElementById('inbox_messages').appendChild(messageElement);
+  }
+
+  // Update pagination tokens
+  nextPageToken = response.result.nextPageToken;
+  prevPageToken = response.result.prevPageToken;
+
+  updatePaginationControls();
+}
+
+async function getPreviousPage() {
+      if (prevPageToken) {
+        await listLabels(prevPageToken);
+      }
+    }
+
+    async function getNextPage() {
+      if (nextPageToken) {
+        await listLabels(nextPageToken);
+      }
+    }
+
+  function updatePaginationControls() {
+  const prevPageButton = document.getElementById('prev_page_button');
+  const nextPageButton = document.getElementById('next_page_button');
+
+  // Enable/Disable the pagination buttons based on the availability of tokens
+  prevPageButton.enabled = prevPageToken; 
+  nextPageButton.disabled = !nextPageToken; // Disable if no next page token
+}
+
+function highlightSearchMatches(content, searchTerm) {
+      const regex = new RegExp(searchTerm, 'gi');
+      const highlightedContent = content.replace(regex, match => `<span class="highlight">${match}</span>`);
+      return highlightedContent;
+}
+
+async function showMessageDetails(messageId) {
+  try {
+    const response = await gapi.client.gmail.users.messages.get({
+      'userId': 'me',
+      'id': messageId,
+      'format': 'full'
+    });
+
+    const message = response.result;
+    if (!message) {
+      alert('Message not found.');
+      return;
+    }
+
+    // Display email subject and content
+    const subjectHeader = message.payload.headers.find(header => header.name === 'Subject');
+    const emailSubject = subjectHeader ? subjectHeader.value : 'No Subject';
+    document.getElementById('email_subject').innerText = `Subject: ${emailSubject}`;
+
+    const emailContent = getEmailContent(message.payload);
+    if (emailContent) {
+      document.getElementById('email_content').innerHTML = emailContent;
+    } else {
+      document.getElementById('email_content').innerText = 'No Content Found.';
+    }
+
+    // Store the selected message ID for future reference
+    selectedMessageId = messageId;
+  } catch (error) {
+    console.error('Error fetching or displaying message:', error);
+    alert('Error fetching or displaying message. Please try again later.');
+  }
+}
+
+function getEmailContent(payload) {
+  try {
+    if (payload.parts) {
+      const htmlPart = payload.parts.find(part => part.mimeType === 'text/html');
+      if (htmlPart && htmlPart.body && htmlPart.body.data) {
+        const decodedEmailContent = window.atob(htmlPart.body.data.replace(/-/g, '+').replace(/_/g, '/'));
+        return decodedEmailContent;
+      }
+      const attachmentPart = payload.parts.find(part => part.filename && part.body && part.body.attachmentId);
+      if (attachmentPart) {
+        const attachmentId = attachmentPart.body.attachmentId;
+        // Return the attachment ID so it can be processed outside the getEmailContent function
+        return attachmentId;
+        console.log(attachmentId);
+      }
+    } else if (payload.body && payload.body.data) {
+      const decodedEmailContent = window.atob(payload.body.data.replace(/-/g, '+').replace(/_/g, '/'));
+      return decodedEmailContent;
+    }
+  } catch (error) {
+    console.error('Error decoding email content:', error);
+  }
+  return null;
+}
+
+const emailContent = getEmailContent(message.payload);
+if (emailContent !== null) {
+  if (typeof emailContent === 'string') {
+    // Display regular email content
+    document.getElementById('email_content').innerHTML = emailContent;
+  } else {
+    const attachmentId = emailContent;
+    const attachmentLink = document.createElement('a');
+    attachmentLink.href = `https://www.googleapis.com/gmail/v1/users/me/messages/${message.id}/attachments/${attachmentId}`;
+    attachmentLink.textContent = 'Download Attachment';
+    attachmentLink.target = '_blank';
+    document.getElementById('email_content').appendChild(attachmentLink);
+  }
+} else {
+  document.getElementById('email_content').innerText = 'No Content Found.';
+}
+
+async function handleEmailClick(messageId, nextPageToken, prevPageToken) {
+  await showMessageDetails(messageId);
+
+  document.getElementById('signout_button').style.display = 'none';
+  document.getElementById('next_page_button').style.display = 'none';
+  document.getElementById('authorize_button').style.display = 'none';
+  document.getElementById('prev_page_button').style.display = 'none';
+  document.getElementById('primary_inbox').style.display = 'none';
+
+  // Update the click event for the "Previous Page" button
+  document.getElementById('prev_page_button').onclick = () => getPreviousPage(prevPageToken);
+  toggleContainers();
+  toggleSendSpecificEmailSection();
+}
+
+function toggleContainers() {
+  const inboxListContainer = document.getElementById('inbox_messages');
+  const messageDetailsContainer = document.getElementById('message_details_container');
+
+
+  inboxListContainer.style.display = 'none';
+  messageDetailsContainer.style.display = 'block';
+}
+
+function toggleSendSpecificEmailSection() {
+  const sendSpecificEmailSection = document.getElementById('send_specific_email');
+   if (sendSpecificEmailSection.style.display === 'none') {
+    sendSpecificEmailSection.style.display = 'block';
+  } else {
+    sendSpecificEmailSection.style.display = 'none';
+  }
+}
+
+function goBackToInboxList() {
+  const inboxListContainer = document.getElementById('inbox_messages');
+  const messageDetailsContainer = document.getElementById('message_details_container');
+
+  inboxListContainer.style.display = 'block';
+  messageDetailsContainer.style.display = 'none';
+
+  // Show the "Sign Out" and "Next Page" buttons again
+  document.getElementById('signout_button').style.display = 'block';
+  document.getElementById('next_page_button').style.display = 'block';
+  document.getElementById('prev_page_button').style.display = 'block';
+  document.getElementById('authorize_button').style.display = 'block';
+  document.getElementById('primary_inbox').style.display = 'block';
+
+  // Hide the Send Specific Email section
+  toggleSendSpecificEmailSection();
+}
+
+async function sendSpecificEmail() {
+  const recipientEmail = document.getElementById('recipient_email').value;
+  if (!recipientEmail) {
+    alert('Recipient email address is required.');
+    return;
+  }
+
+  // Validate the recipient's email address using regular expression
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(recipientEmail)) {
+    alert('Invalid recipient email address. Please enter a valid Gmail address.');
+    return;
+  }
+
+  // Get all selected message IDs
+  const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+  const selectedMessageIds = Array.from(checkboxes)
+    .filter(checkbox => checkbox.checked)
+    .map(checkbox => checkbox.id.replace('checkbox_', ''));
+
+  if (selectedMessageIds.length === 0) {
+    alert('Please select at least one email from the inbox to send.');
+    return;
+  }
+
+  // Send the selected emails to the recipient
+  for (const messageId of selectedMessageIds) {
+    await sendMail(messageId, recipientEmail);
+  }
+}
+
+async function sendMail(messageId, recipientEmail) {
+      try {
+        if (!recipientEmail) {
+          alert('Recipient email address is required.');
+          return;
+        }
+
+        const response = await gapi.client.gmail.users.messages.get({
+          'userId': 'me',
+          'id': messageId,
+          'format': 'full' // Retrieve the full email content
+        });
+
+        const message = response.result;
+        if (!message) {
+          alert('Message not found.');
+          return;
+        }
+
+        // Get the email subject and content
+        const emailSubject = message.payload.headers.find(header => header.name === 'Subject').value;
+        let emailContent = '';
+
+        // Check if the email has HTML content
+        const htmlPart = message.payload.parts.find(part => part.mimeType === 'text/html');
+        if (htmlPart && htmlPart.body && htmlPart.body.data) {
+          emailContent = window.atob(htmlPart.body.data.replace(/-/g, '+').replace(/_/g, '/')); // Decode the HTML content
+        } else {
+          // If no HTML content, fall back to plain text
+          const plainPart = message.payload.parts.find(part => part.mimeType === 'text/plain');
+          if (plainPart && plainPart.body && plainPart.body.data) {
+            emailContent = window.atob(plainPart.body.data.replace(/-/g, '+').replace(/_/g, '/')); // Decode the plain text content
+          }
+        }
+
+        // Create the new email with the selected email's content
+        const rawEmail = `To: ${recipientEmail}\r\nSubject: Forwarded: ${emailSubject}\r\nContent-Type: text/html; charset="UTF-8"\r\n\r\n${emailContent}`;
+
+        const base64EncodedEmail = btoa(unescape(encodeURIComponent(rawEmail)));
+
+        const sendResponse = await gapi.client.gmail.users.messages.send({
+          'userId': 'me',
+          'resource': {
+            'raw': base64EncodedEmail,
+          }
+        });
+
+        // Check the sendResponse and handle success/error accordingly
+        if (sendResponse.status === 200) {
+          alert('Email sent successfully!');
+        } else {
+          alert('Error sending the email. Please try again later.');
+        }
+      } catch (error) {
+        console.error('Error sending the email:', error);
+
+        // Log the detailed error response for debugging
+        console.log('Error Response:', error.result);
+
+        // Display a generic error message to the user
+        alert('Error sending the email. Please try again later.');
+      }
+    }
+  </script>
+  <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+  <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
+
+    </body>
+  </html>
