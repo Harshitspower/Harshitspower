@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href='https://unpkg.com/boxicons@2.1.1/css/boxicons.min.css' rel='stylesheet'>
+  <link rel="stylesheet" href="chatbot.css">
+  <title>Chatbox</title>
+</head>
+<body>
+  <div class="chatbox-wrapper">
+        <div class="chatbox-toggle">
+      <i class='bx bx-comment-dots'></i>
+      <!-- <img src="" alt="" > -->
+    </div>
+    <div class="message" id="chatbotMessage">
+      Hi there 👋 What brings you to Complyrelax
+      <span class="close" id="closeButton">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2C6.47 2 2 6.47 2 12C2 17.53 6.47 22 12 22C17.53 22 22 17.53 22 12C22 6.47 17.53 2 12 2ZM17 15.59L15.59 17L12 13.41L8.41 17L7 15.59L10.59 12L7 8.41L8.41 7L12 10.59L15.59 7L17 8.41L13.41 12L17 15.59Z" fill="#BDC1C6"></path>
+          <path d="M12 22C6.47715 22 2 17.5228 2 12H-2C-2 19.732 4.26801 26 12 26V22ZM22 12C22 17.5228 17.5228 22 12 22V26C19.732 26 26 19.732 26 12H22ZM12 2C17.5228 2 22 6.47715 22 12H26C26 4.26801 19.732 -2 12 -2V2ZM12 -2C4.26801 -2 -2 4.26801 -2 12H2C2 6.47715 6.47715 2 12 2V-2Z" fill="#BDC1C6">
+          </path>
+        </svg>
+      </span>
+    </div>
+        <div class="chatbox-message-wrapper">
+      <div class="chatbox-message-header">
+        <div class="chatbox-message-profile">
+          <img src="https://cdn-icons-png.flaticon.com/128/6873/6873405.png" alt="" class="chatbox-message-image">
+          <div>
+            <h4 class="chatbox-message-name">Cherish</h4>
+            <p class="chatbox-message-status">online</p>
+          </div>
+        </div>
+        <div class="chatbox-message-dropdown">
+          <i class='bx close-button chatbox-message-dropdown-toggle'>&times;</i>
+        </div>
+      </div>
+	 <div class="chatbox-message-content">
+        <h4 class="chatbox-message-no-message"></h4>
+      </div>    
+      <div class="chatbox-message-bottom">
+        <form action="#" class="chatbox-message-form">
+          <input id="searchBox" name="message" type="text" placeholder="Type message...." class="chatbox-message-input" autocomplete="off"></input>
+          <button type="submit" class="chatbox-message-submit"><i class='bx bx-send' style="margin-left: -9px; font-weight: 600;"></i></button>
+        </form>
+      </div>
+    </div>
+  </div>	
+
+  <script src="chat.bot.js"></script>
+  <!-- <script src="script.js"></script> -->
+
+</body> 
+</html>
